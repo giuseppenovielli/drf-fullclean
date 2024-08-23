@@ -17,7 +17,7 @@ version = get_version('drf_fullclean')
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
     
-with open('LICENSE.md', "r", encoding="utf-8") as f:
+with open('LICENSE', "r", encoding="utf-8") as f:
     license = f.read()
     
     
