@@ -23,7 +23,7 @@ s.save()
 ```
 When you call `s.is_valid(raise_exception=True)` this method invoke also Model.full_clean() method.
 
-The validation FAIL IF Model.full_clean() FAIL.
+**The validation FAIL IF Model.full_clean() FAIL.**
 
 ## API
 `is_valid()` is extended with Model.full_clean() api.
@@ -34,7 +34,7 @@ is_valid(self, raise_exception=False, exclude=None, validate_unique=True, extra_
   + [raise_exception=False](https://www.django-rest-framework.org/api-guide/serializers/#raising-an-exception-on-invalid-data)
   + [exclude=None](https://docs.djangoproject.com/en/3.2/ref/models/instances/#django.db.models.Model.full_clean)
   + [validate_unique=True](https://docs.djangoproject.com/en/3.2/ref/models/instances/#django.db.models.Model.full_clean)
-  + [extra_include=None]()
+  + [extra_include=None](https://github.com/giuseppenovielli/drf-fullclean/discussions/4)
   
 
 
