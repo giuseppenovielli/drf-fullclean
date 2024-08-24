@@ -4,10 +4,21 @@
 
 **Call django Model.full_clean(exclude=None, validate_unique=True) when invoke serializer.is_valid() of ModelSerializer**
 
+## Warning!
+1. One ModelSerializer -> Use this library.
+2. Multiple ModelSerializer -> [PLEASE READ ME](https://github.com/giuseppenovielli/drf-fullclean/discussions/4)
 
 ## Installation
 ```
 pip install drf-fullclean
+```
+
+## Configuration
+Add the following code into settings.py
+```
+DRF_FULL_CLEAN = {
+    "DEBUG" : False #set True if you want to see debug print
+}
 ```
 
 ## Usage
