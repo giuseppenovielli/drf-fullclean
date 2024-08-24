@@ -4,6 +4,14 @@
 
 **Call django Model.full_clean(exclude=None, validate_unique=True) when invoke serializer.is_valid() of ModelSerializer**
 
+### Django Rest Framework 3 Design
+https://www.django-rest-framework.org/community/3.0-announcement/#differences-between-modelserializer-validation-and-modelform
+### Differences between ModelSerializer validation and ModelForm.
+> This change also means that we no longer use the .full_clean() method on model instances, but instead perform all validation explicitly on the serializer. This gives a cleaner separation, and ensures > that there's no automatic validation behavior on ModelSerializer classes that can't also be easily replicated on regular Serializer classes.
+
+### Discussions
+https://github.com/encode/django-rest-framework/discussions/7850
+
 ## Warning!
 1. One ModelSerializer -> Use this library.
 2. Multiple ModelSerializer -> [PLEASE READ ME](https://github.com/giuseppenovielli/drf-fullclean/discussions/4)
