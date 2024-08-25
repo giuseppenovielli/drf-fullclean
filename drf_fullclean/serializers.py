@@ -6,10 +6,12 @@ https://www.github.com/giuseppenovielli/
 https://www.django-rest-framework.org/community/3.0-announcement/#differences-between-modelserializer-validation-and-modelform
 https://github.com/encode/django-rest-framework/discussions/7850#discussioncomment-8380135
 """
+from copy import deepcopy
 from rest_framework import serializers
 
 from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
+from django.db.models.fields.reverse_related import ManyToManyRel
 
 from django.core.exceptions import ValidationError as DjangoValidationError, FieldDoesNotExist
 
@@ -67,9 +69,11 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
         if extra_include and not isinstance(extra_include, dict):
             raise TypeError('Expected dict for argument "extra_include", but got: %r' % extra_include)
         
-        obj = self.model_instance(self.Meta.model, self.validated_data, self.instance, self.partial, extra_include, **kwargs)
+        self.instance_fullclean = None
         
-        print('Instance to FullClean -> {}'.format(instance_to_dict(obj)))
+        obj = self.model_instance(self.Meta.model, self.validated_data, self.get_instance_update_to_fullclean(), self.partial, extra_include, **kwargs)
+        
+        print_debug('is_valid_model -> Instance To FullClean -> {} -- {}'.format(type(obj), instance_to_dict(obj)))
         if obj:
             errors = self.model_validation(obj, exclude, validate_unique, extra_include, **kwargs)
         else:
@@ -83,8 +87,20 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
     #
     
     #INSTANCE
+    def get_instance_update_to_fullclean(self):
+        if self.instance_fullclean:
+            return self.instance_fullclean
+        
+        i = self.instance
+        if not i:
+            return
+        
+        # Not use the original instance, the layer FullCleanModelSerializer is completely trasparent, not modifying the original instances
+        return deepcopy(i)
+    
+    
     def model_instance(self, model_class, validated_data, instance=None, partial=False, extra_include=None, **kwargs):
-        print_debug('validated_data -> {}'.format(validated_data))
+        print_debug('model_instance -> validated_data -> {}'.format(validated_data))
         if not instance:
             return self.model_instance_create(model_class, validated_data, extra_include, **kwargs)
         return self.model_instance_update(model_class, validated_data, instance, partial, extra_include, **kwargs)
@@ -97,7 +113,14 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
         #Add fields value that are not in validated_data
         if extra_include:
             for key,value in extra_include.items():
+                
+                # Skip ManyToManyRel
+                field = instance._meta.get_field(key)
+                if isinstance(field, ManyToManyRel):
+                    continue
+                
                 setattr(instance, key, value)
+                
         return instance
     
     # CREATE
@@ -105,7 +128,7 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
         try:
             return model_class(**validated_data)
         except Exception as e:
-            print_debug('Create Instance EXCEPTION -> {}'.format(e))
+            print_debug('Create Instance -> EXCEPTION -> {}'.format(e))
     
     
     def model_instance_create(self, model_class, validated_data, extra_include=None, **kwargs):
@@ -126,7 +149,7 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
                 setattr(instance, field.name, validated_data[field.name])
             return instance
         except Exception as e:
-            print_debug('Update Instance EXCEPTION -> {}'.format(e))
+            print_debug('Update Instance -> EXCEPTION -> {}'.format(e))
             
         
     
@@ -159,51 +182,83 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
                 exclusions.remove(field_name)
         return exclusions
     
-    
-    def model_validation_method(self, object, exclude=None, validate_unique=True, extra_include=None, **kwargs):        
-        fields_to_exclude = self._get_validation_exclusions(self.instance)
-        print_debug('serializer fields excluded -> {}'.format(fields_to_exclude))
+    def get_can_include_field(self, field, value):
+        # Check if a field with value can be added to instance
+        if isinstance(field, ManyToManyRel):
+            return True
         
+        if (
+                field.is_relation
+                and
+                bool(field.validators) 
+                and 
+                (
+                    value.pk is None 
+                    or 
+                    value.id is None
+                )
+            ):
+            raise Exception('Unsupported validation! Field {} is a relation that contains validators that needs the database id. \
+                Try to move validations\'s logic into clean() method, but analize object\'s fields instead make a query to the database, \
+                that validators need'.format(field.name))
+        return True
+                  
+    
+    def can_remove_field_from_excluded_list(self, field, value):
+        if not field.is_relation:
+            return True
+        
+        # Check if a field is a relation with a database id, can be removed from excluded list
+        return value.pk and value.id   
+    
+                        
+    def get_exclude(self, instance, exclude=None, extra_include=None, **kwargs):
+        fields_to_exclude = self._get_validation_exclusions(self.get_instance_update_to_fullclean())
+        print_debug('get_exclude -> serializer fields excluded -> {}'.format(fields_to_exclude))
+        
+        print_debug('get_exclude -> model exclude -> {}'.format(exclude))
         if exclude:
             fields_to_exclude.extend(exclude)
         
-        print_debug('model exclude -> {}'.format(exclude))
         
         if extra_include:
             for key, value in extra_include.items():
                 try:
-                    field = object._meta.get_field(key)
-                    fields_to_exclude.append(key)
+                    field = instance._meta.get_field(key)
                     
-                    if (
-                            field.is_relation 
-                            and 
-                            bool(field.validators) 
-                            and 
-                            (
-                                value.pk is None 
-                                or 
-                                value.id is None
-                            )
-                        ):
-                        raise Exception('Unsupported validation! Field {} is a relation that contains validators that needs the database id. \
-                            Try to move validations\'s logic into clean() method, but analize object\'s fields instead make a query to the database, \
-                            that validators need'.format(key))
+                    can_include = self.get_can_include_field(field, value)
+                    if not can_include:
+                        continue
+                    
+                    can_remove_field_from_excluded_list = self.can_remove_field_from_excluded_list(field, value)
+                    if not can_remove_field_from_excluded_list:
+                        fields_to_exclude.append(key)
+                    else:
+                        try:
+                            fields_to_exclude.remove(key)
+                        except ValueError:
+                            pass  # do nothing!
                         
                 except FieldDoesNotExist:
                     pass
         
         exclude = list(set(fields_to_exclude))
-        print_debug('model full_clean exclude final -> {}'.format(exclude))
+        print_debug('get_exclude -> model full_clean exclude final -> {}'.format(exclude))
         
+        return exclude
+    
+    def model_validation_method(self, instance, exclude=None, validate_unique=True, extra_include=None, **kwargs):
         l = []
         if extra_include:
             for key, value in extra_include.items():
                 l.append({key: instance_to_dict(value)})
-        print_debug('extra include -> {}'.format(l))
-            
-        object.full_clean(exclude=exclude, validate_unique=validate_unique)
+        print_debug('model_validation_method -> extra include -> {}'.format(l))
         
+        
+        exclude = self.get_exclude(instance, exclude, extra_include, **kwargs)
+        
+        print_debug('model_validation_method -> Invoke Model.full_clean() -> {} -- {}'.format(type(instance), instance_to_dict(instance)))
+        instance.full_clean(exclude=exclude, validate_unique=validate_unique)
         
         
         
