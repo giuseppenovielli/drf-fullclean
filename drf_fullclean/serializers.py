@@ -7,35 +7,14 @@ https://www.django-rest-framework.org/community/3.0-announcement/#differences-be
 https://github.com/encode/django-rest-framework/discussions/7850#discussioncomment-8380135
 """
 from copy import deepcopy
-from rest_framework import serializers
 
-from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.fields.reverse_related import ManyToManyRel
 
 from django.core.exceptions import ValidationError as DjangoValidationError, FieldDoesNotExist
+from rest_framework import serializers
 
-from django.forms.models import model_to_dict
-
-from drf_fullclean.utils import remove_many_to_many
-
-# DEBUG
-def print_debug(message):
-    drf_full_clean = getattr(settings, 'DRF_FULL_CLEAN', {})
-    if not drf_full_clean.get('DEBUG', False):
-        return
-    print('\nDRF_FULL_CLEAN -> {}'.format(message))
-    
-def instance_to_dict(instance):
-    value_to_dict = None
-    try:
-        value_to_dict = model_to_dict(instance)
-    except:
-        try:
-            value_to_dict = instance.__dict__
-        except:
-            pass
-    return value_to_dict
+from .utils import instance_to_dict, print_debug, remove_many_to_many
                     
 
 class FullCleanModelSerializer(serializers.ModelSerializer):
@@ -76,10 +55,7 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
         obj = self.model_instance(self.Meta.model, self.get_validated_data(), self.get_instance_update_to_fullclean(), self.partial, extra_include, **kwargs)
         
         print_debug('is_valid_model -> Instance To FullClean -> {} -- {}'.format(type(obj), instance_to_dict(obj)))
-        if obj:
-            errors = self.model_validation(obj, exclude, validate_unique, extra_include, **kwargs)
-        else:
-            raise Exception('Nested serializers are not supported.')
+        errors = self.model_validation(obj, exclude, validate_unique, extra_include, **kwargs)
         
         if errors and raise_exception:
             raise serializers.ValidationError(detail=errors)
@@ -135,10 +111,7 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
     
     # CREATE
     def create_instance(self, model_class, validated_data, **kwargs):
-        try:
-            return model_class(**validated_data)
-        except Exception as e:
-            print_debug('Create Instance -> EXCEPTION -> {}'.format(e))
+        return model_class(**validated_data)
     
     
     def model_instance_create(self, model_class, validated_data, extra_include=None, **kwargs):
@@ -152,14 +125,11 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
         if not instance:
             return
         
-        try:
-            for field in instance._meta.fields:
-                if field.name not in validated_data:
-                    continue
-                setattr(instance, field.name, validated_data[field.name])
-            return instance
-        except Exception as e:
-            print_debug('Update Instance -> EXCEPTION -> {}'.format(e))
+        for field in instance._meta.fields:
+            if field.name not in validated_data:
+                continue
+            setattr(instance, field.name, validated_data[field.name])
+        return instance
             
         
     
