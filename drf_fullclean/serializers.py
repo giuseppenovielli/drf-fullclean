@@ -17,6 +17,8 @@ from django.core.exceptions import ValidationError as DjangoValidationError, Fie
 
 from django.forms.models import model_to_dict
 
+from drf_fullclean.utils import remove_many_to_many
+
 # DEBUG
 def print_debug(message):
     drf_full_clean = getattr(settings, 'DRF_FULL_CLEAN', {})
@@ -69,9 +71,9 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
         if extra_include and not isinstance(extra_include, dict):
             raise TypeError('Expected dict for argument "extra_include", but got: %r' % extra_include)
         
-        self.instance_fullclean = None
+        self._instance_fullclean = None
         
-        obj = self.model_instance(self.Meta.model, self.validated_data, self.get_instance_update_to_fullclean(), self.partial, extra_include, **kwargs)
+        obj = self.model_instance(self.Meta.model, self.get_validated_data(), self.get_instance_update_to_fullclean(), self.partial, extra_include, **kwargs)
         
         print_debug('is_valid_model -> Instance To FullClean -> {} -- {}'.format(type(obj), instance_to_dict(obj)))
         if obj:
@@ -86,18 +88,26 @@ class FullCleanModelSerializer(serializers.ModelSerializer):
     
     #
     
+    # Validated Data
+    def get_validated_data(self):
+        validated_data = deepcopy(self.validated_data)
+        validated_data = remove_many_to_many(self, validated_data)
+        return validated_data
+    #
+    
     #INSTANCE
     def get_instance_update_to_fullclean(self):
-        if self.instance_fullclean:
-            return self.instance_fullclean
+        if self._instance_fullclean:
+            return self._instance_fullclean
         
         i = self.instance
         if not i:
-            return
+            return 
         
         # Not use the original instance, the layer FullCleanModelSerializer is completely trasparent, not modifying the original instances
-        return deepcopy(i)
-    
+        self._instance_fullclean = i = deepcopy(i)
+        return i
+
     
     def model_instance(self, model_class, validated_data, instance=None, partial=False, extra_include=None, **kwargs):
         print_debug('model_instance -> validated_data -> {}'.format(validated_data))
